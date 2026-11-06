@@ -1,22 +1,26 @@
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from main import app, storage
+from src.storage import MOVIE_COLUMNS
 
+def clear_storage():
+    storage.save(pd.DataFrame(columns=MOVIE_COLUMNS))
 
 @pytest.fixture
 def client():
-    storage.clear()
+    clear_storage()
     with TestClient(app) as test_client:
         yield test_client
-    storage.clear()
+    clear_storage()
 
 
 @pytest.fixture
-def sample_csv_bytes():
-    filepath = Path("fixtures") / "sample_data.csv"
+def sample_movie_bytes():
+    filepath = Path("fixtures") / "sample_movies.csv"
     return filepath.read_bytes()
 
 @pytest.fixture
@@ -31,27 +35,20 @@ def empty_csv_bytes():
 
 
 @pytest.fixture
-def uploaded_dataset_id(client, sample_csv_bytes):
+def uploaded_movies(client, sample_movie_bytes):
     response = client.post(
         "/upload",
-        files={
-            "file": (
-                "sample_data.csv",
-                sample_csv_bytes,
-                "text/csv"
-            )
-        }
+        files={"file": ("sample_movies.csv", sample_movie_bytes, "text/csv")}
     )
     assert response.status_code == 200
-    return response.json()["id"]
 
 
 @pytest.fixture
 def processing_body():
     return {
         "validation": {
-            "required_columns": ["student_id", "score"],
-            "numeric_columns": ["score"]
+            "required_columns": list(MOVIE_COLUMNS),
+            "numeric_columns": ["release_year", "rating"]
         },
         "processing": {
             "remove_duplicates": True,
