@@ -78,17 +78,14 @@ def get_movies(limit: int = Query(default=100, ge=1)):
         return {"data": rows, "total_rows": count}
 
 
-@app.post(
-    "/datasets/{dataset_id}/process",
-    response_model=ProcessingReport
-)
-def process_dataset(dataset_id: int, config: ProcessConfig):
-    """Validate and process a stored dataset using MP1 functions."""
-    data = storage.get(dataset_id)
-    if data is None:
-        logger.warning(f"Dataset ID {dataset_id} not found")
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    logger.info(f"Dataset {dataset_id} loaded successfully")
+
+@app.post("/movies/process", response_model=MovieProcessingReport)
+def process_movies(config: ProcessConfig):
+    data = storage.get()
+    count = storage.count_movies()
+    if count == 0:
+        raise HTTPException(status_code=400, detail="Empty dataset")
+    logger.info(f"Successfully retrieved dataset")
 
     process_config = config.model_dump()
     required_columns = process_config["validation"]["required_columns"]
@@ -96,33 +93,32 @@ def process_dataset(dataset_id: int, config: ProcessConfig):
 
     missing = [col for col in numeric_columns if col not in data.columns]
     if missing:
-        logger.warning(f"Dataset {dataset_id} missing numeric columns: {missing}")
+        logger.warning(f"Dataset missing numeric columns: {missing}")
         raise HTTPException(status_code=400, detail=f"Numeric columns not found")
 
     try:
         df_before = data.copy()
         df = validate_dataframe(data, required_columns, numeric_columns)
 
-        logger.info(f"Dataset {dataset_id} rows before validating: {len(df_before)} | Rows after: {len(df)}")
+        logger.info(f"Dataset rows before validating: {len(df_before)} | Rows after: {len(df)}")
         df_validated = df.copy()
         rows_removed = len(df_before) - len(df_validated)
 
         df_processed = process_data(df, process_config)
-        logger.info(f"Dataset {dataset_id} pocessing complete: {len(df_validated)} -> {len(df_processed)} rows")
+        logger.info(f"Dataset processing complete: {len(df_validated)} -> {len(df_processed)} rows")
     
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
     report = create_cleaning_report(df_validated, df_processed)
 
-    storage.update(dataset_id, df_processed)
-    logger.info(f"Updated dataset {dataset_id} successfully")
+    storage.save(df_processed)
 
     return {
-        "id": dataset_id,
         "validation_rows_removed": rows_removed,
         "cleaning_report": report
     }
+
 
 @app.get("/movies/search", response_model=list[dict])
 def query_movies(
