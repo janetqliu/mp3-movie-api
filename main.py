@@ -7,7 +7,11 @@ import logging
 from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from src import setup_logging, DatasetInfo, DatasetStorage, HealthResponse, ProcessConfig, ProcessingReport, log_requests
+from src import (setup_logging, DatasetInfo, HealthResponse, 
+                 ProcessConfig, ProcessingReport, log_requests, MovieStorage,
+                 MovieUploadInfo, MovieDataResponse, MovieProcessingReport)
+
+from src.storage import MOVIE_COLUMNS
 from data_pipeline import create_cleaning_report, process_data, validate_dataframe
 
 setup_logging(verbose=True)
@@ -15,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Data Processing API", version="1.0.0")
 app.middleware("http")(log_requests)
-storage = DatasetStorage()
+storage = MovieStorage()
 
 @app.get("/health", response_model=HealthResponse)
 def health_check():
@@ -23,7 +27,7 @@ def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
-@app.post("/upload", response_model=DatasetInfo)
+@app.post("/upload", response_model=MovieUploadInfo)
 async def upload_dataset(file: UploadFile = File(...)):
     """Read and store a CSV upload."""
 
@@ -40,11 +44,18 @@ async def upload_dataset(file: UploadFile = File(...)):
         logger.warning(f"Cannot read CSV: {error}")
         raise HTTPException(status_code=400, detail="Cannot read the uploaded CSV")
 
-    dataset_id = storage.save(df, filename.name)
-    logger.info(f"Saved dataset {dataset_id}: {filename.name}, {df.shape[0]} rows")
+    if set(df.column) != set(MOVIE_COLUMNS):
+        raise HTTPException(status_code=400, detail="Columns must match MOVIE_COLUMNS exactly")
+    
+    if not df.empty():
+        raise HTTPException(status_code=400, detail="Dataframe needs at least one row")
 
-    return DatasetInfo(
-        id=dataset_id,
+    df = df[MOVIE_COLUMNS]
+
+    storage.save(df)
+    logger.info(f"Saved file {filename} with {len(df)} rows")
+
+    return MovieUploadInfo(
         filename=filename.name,
         rows=df.shape[0],
         columns=df.shape[1],
@@ -68,6 +79,19 @@ def get_dataset(dataset_id: int, limit: int = Query(default=100, ge=1)):
     return {"id": dataset_id,
             "data": records,
             "total_rows": len(df)}
+
+@app.get("/movies", response_model=MovieDataResponse)
+def get_movies(limit: int = Query(default=100, ge=1)):
+    """Retrieve up to limit rows and count total number of stored movies."""
+    rows = storage.select_columns(MOVIE_COLUMNS, limit)
+    count = storage.count_movies()
+
+    logger.info(f"Row count: {count}")
+
+    if count == 0:
+        return {"data": [], "total_rows": 0}
+    else:
+        return {"data": rows, "total_rows": count}
 
 
 @app.post(
