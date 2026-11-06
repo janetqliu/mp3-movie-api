@@ -4,7 +4,7 @@ from pathlib import Path
 
 def get_connection(db_path):
     """Return a fresh connection with rows accessible by column name."""
-    path = Path("data") / db_path
+    path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row

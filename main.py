@@ -2,13 +2,12 @@
 # main.py
 
 import io
-import json
 import logging
 from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
-from src import (setup_logging, DatasetInfo, HealthResponse, 
-                 ProcessConfig, ProcessingReport, log_requests, MovieStorage,
+from src import (setup_logging, HealthResponse, 
+                 ProcessConfig, log_requests, MovieStorage,
                  MovieUploadInfo, MovieDataResponse, MovieProcessingReport)
 
 from src.storage import MOVIE_COLUMNS
@@ -28,7 +27,7 @@ def health_check():
 
 
 @app.post("/upload", response_model=MovieUploadInfo)
-async def upload_dataset(file: UploadFile = File(...)):
+async def upload_movies(file: UploadFile = File(...)):
     """Read and store a CSV upload."""
 
     filename = Path(file.filename or "")
@@ -44,10 +43,10 @@ async def upload_dataset(file: UploadFile = File(...)):
         logger.warning(f"Cannot read CSV: {error}")
         raise HTTPException(status_code=400, detail="Cannot read the uploaded CSV")
 
-    if set(df.column) != set(MOVIE_COLUMNS):
+    if set(df.columns) != set(MOVIE_COLUMNS):
         raise HTTPException(status_code=400, detail="Columns must match MOVIE_COLUMNS exactly")
     
-    if not df.empty():
+    if df.empty:
         raise HTTPException(status_code=400, detail="Dataframe needs at least one row")
 
     df = df[MOVIE_COLUMNS]
@@ -72,18 +71,14 @@ def get_movies(limit: int = Query(default=100, ge=1)):
 
     logger.info(f"Row count: {count}")
 
-    if count == 0:
-        return {"data": [], "total_rows": 0}
-    else:
-        return {"data": rows, "total_rows": count}
+    return {"data": rows, "total_rows": count}
 
 
 
 @app.post("/movies/process", response_model=MovieProcessingReport)
 def process_movies(config: ProcessConfig):
     data = storage.get()
-    count = storage.count_movies()
-    if count == 0:
+    if data.empty:
         raise HTTPException(status_code=400, detail="Empty dataset")
     logger.info(f"Successfully retrieved dataset")
 
