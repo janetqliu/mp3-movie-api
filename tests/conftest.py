@@ -4,19 +4,21 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from main import app, storage
+import main
+from src import MovieStorage
 from src.storage import MOVIE_COLUMNS
 
-def clear_storage():
-    storage.save(pd.DataFrame(columns=MOVIE_COLUMNS))
+@pytest.fixture
+def storage(tmp_path):
+    return MovieStorage(tmp_path / "movies.db")
+
 
 @pytest.fixture
-def client():
-    clear_storage()
-    with TestClient(app) as test_client:
+def client(storage, monkeypatch):
+    #`monkeypatch` makes the API use that test's storage object and restores the original afterward
+    monkeypatch.setattr(main, "storage", storage)
+    with TestClient(main.app) as test_client:
         yield test_client
-    clear_storage()
-
 
 @pytest.fixture
 def sample_movie_bytes():

@@ -37,7 +37,6 @@ class MovieStorage:
     def get(self):
         """Return the four movie columns as a DataFrame, ordered by id."""
         connection = get_connection(self.db_path)
-        connection.row_factory = sqlite3.Row
         try:
             sql_statement = f"SELECT {', '.join(MOVIE_COLUMNS)} FROM movies ORDER BY id"
             rows = connection.execute(sql_statement).fetchall()
