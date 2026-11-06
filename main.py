@@ -64,22 +64,6 @@ async def upload_dataset(file: UploadFile = File(...)):
 
 
 
-@app.get("/datasets/{dataset_id}")
-def get_dataset(dataset_id: int, limit: int = Query(default=100, ge=1)):
-    """Return up to limit rows from a stored dataset."""
-    df = storage.get(dataset_id)
-    if df is None:
-        logger.warning(f"Dataset ID {dataset_id} not found")
-        raise HTTPException(status_code=404, detail="Dataset not found")
-
-    records = json.loads(df.head(limit).to_json(orient="records"))
-
-    logger.info(f"Returned {len(records)} rows from dataset {dataset_id}") 
-    
-    return {"id": dataset_id,
-            "data": records,
-            "total_rows": len(df)}
-
 @app.get("/movies", response_model=MovieDataResponse)
 def get_movies(limit: int = Query(default=100, ge=1)):
     """Retrieve up to limit rows and count total number of stored movies."""
