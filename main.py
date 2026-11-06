@@ -123,3 +123,17 @@ def process_dataset(dataset_id: int, config: ProcessConfig):
         "validation_rows_removed": rows_removed,
         "cleaning_report": report
     }
+
+@app.get("/movies/search", response_model=list[dict])
+def query_movies(
+    columns: list[str] = Query(default=["title"]),
+    min_rating: float = Query(default=0, ge=0, le=10),
+    limit: int = Query(default=100, ge=1)
+):
+    try:
+        rows = storage.query_movies(columns, min_rating, limit)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.info(f"Selected columns: {columns} | Returned row count: {len(rows)}")
+    return rows
